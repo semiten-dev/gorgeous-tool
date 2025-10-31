@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>スロット履歴・差枚カウンター</title>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <style>
+        body { 
+            font-family: sans-serif; 
+            margin: 10px; /* 余白を少し減らす */
+        }
+        
+        h1, h2 { 
+            border-bottom: 2px solid #007bff; 
+            padding-bottom: 5px; 
+            font-size: 1.5em; /* 見出しを少し調整 */
+        }
+        
+        /* --- 1. PC用の設定 --- */
+        .container { 
+            display: flex; 
+            gap: 40px; 
+        }
+        .left-panel { width: 50%; }
+        .right-panel { width: 50%; }
+
+        /* --- 2. スマホ用の設定 (画面幅768px以下) --- */
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column; /* 横並び → 縦並び に変更 */
+                gap: 20px; /* 隙間を減らす */
+            }
+            .left-panel, .right-panel {
+                width: 100%; /* 横幅を50% → 100% に変更 */
+            }
+            h1, h2 {
+                font-size: 1.2em; /* スマホでは見出しを少し小さく */
+            }
+            body {
+                margin: 5px; /* スマホでは余白をさらに減らす */
+            }
+        }
+        
+        /* --- 3. 共通のスタイル --- */
+        .form-section { 
+            background-color: #f4f4f4; 
+            border: 1px solid #ccc; 
+            padding: 15px; 
+            margin-bottom: 20px; 
+        }
+        .form-section input { width: 80px; }
+        
+        #state-area {
+            font-size: 1em; /* 18px固定 → 1em (標準サイズ) に変更 */
+            font-weight: bold;
+            background-color: #f0f8ff;
+            border: 1px solid #bde0ff;
+            padding: 15px;
+        }
+        
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 10px;
+            font-size: 0.9em; /* スマホでも見やすいよう少し調整 */
+        }
+        th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+        th { background-color: #f0f0f0; }
+        
+        .big { color: red; font-weight: bold; }
+        .reg { color: blue; font-weight: bold; }
+        .current { color: #333; font-weight: bold; }
+        
+        /* 削除ボタンのスタイル */
+        .button {
+            text-decoration: none; 
+            color: white; 
+            padding: 5px 10px; 
+            border-radius: 5px; 
+            font-size: 14px;
+        }
+        .reset-button { 
+            background-color: #dc3545;
+        }
+        .delete-last-button {
+            background-color: #ffc107;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>スロット履歴・差枚カウンター (50枚/32G)</h1>
+    
+    <div class="container">
+        <div class="left-panel">
+            
+            <form action="/update_games" method="POST" class="form-section">
+                <h2>現在のG数 (ボーナス間)</h2>
+                <input type="text" name="current_games" value="{{ current_games_input }}"> G
+                <button type"submit">更新</button>
+            </form>
+            
+            <div id="state-area">
+                <h2>現在のトータル差枚</h2>
+                {% if state.error %}
+                    <p style="color: red;">{{ state.error }}</p>
+                {% elif state.games is defined and state.games > 0 %}
+                    <p>
+                        総回転数: {{ "%.0f"|format(state.games) }}G<br> 
+                        総投入(概算): {{ "%.0f"|format(state.total_in) }}枚<br>
+                        総払出: {{ "%.0f"|format(state.total_out) }}枚 (BB: {{ "%.0f"|format(state.bb_total) }}枚, RB: {{ "%.0f"|format(state.rb_total) }}枚)<br>
+                        <span style="font-size: 1.1em;">
+                            機械割: {{ "%.2f"|format(state.wari) }} %
+                        </span><br>
+                        <span style="font-size: 1.2em;">
+                            差枚: {{ "%+.0f"|format(state.sashimai) }}枚
+                        </span>
+                    </p>
+                    
+                    {% if state.games_to_target_str %}
+                    <p style="font-size: 1.1em; color: #007bff; margin-top: 10px; border-top: 1px dashed #bde0ff; padding-top: 10px;">
+                        {{ state.games_to_target_str }}
+                    </p>
+                    {% endif %}
+                    
+                {% else %}
+                    <p>データを入力してください</p>
+                {% endif %}
+            </div>
+
+            <form action="/add_bonus" method="POST" class="form-section">
+                <h2>ボーナス追加</h2>
+                ボーナスG数: <input type="text" name="games_at" required> G
+                <br><br>
+                種別: 
+                <select name="bonus_type">
+                    <option value="BIG">BIG</option>
+                    <option value="REG">REG</option>
+                </select>
+                <br><br>
+                放出枚数: <input type="text" name="payout" placeholder="(自動: 210/90)"> 枚
+                <br><br>
+                <button type="submit">履歴に追加</button>
+            </form>
+        </div>
+
+        <div class="right-panel">
+            <h2>
+                ボーナス履歴 ({{ history|length }}件)
+                <span style="float: right;">
+                    <a href="/delete_last" class="button delete-last-button">直近1件を削除</a>
+                    <a href="/reset" class="button reset-button">全リセット</a>
+                </span>
+            </h2>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>G数 (ボーナス間)</th>
+                        <th>種別</th>
+                        <th>累計G数</th>
+                        <th>放出枚数</th>
+                        <th>機械割</th>
+                        <th>その時点の差枚</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in history %}
+                    <tr>
+                        <td>
+                            {% if item.type != '現在' %}
+                                {{ loop.index }}
+                            {% else %}
+                                <span class="current">▶</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ item.games_at }} G</td>
+                        <td>
+                            {% if item.type == 'BIG' %}
+                                <span class="big">BIG</span>
+                            {% elif item.type == 'REG' %}
+                                <span class="reg">REG</span>
+                            {% else %}
+                                <span class="current">{{ item.type }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.type == 'BIG' or item.type == 'REG' %}
+                                {{ "%.0f"|format(item.cumulative_g_start) }}G → {{ "%.0f"|format(item.cumulative_g_end) }}G
+                            {% elif item.type == '現在' %}
+                                {{ "%.0f"|format(item.cumulative_g_start) }}G
+                            {% endif %}
+                        </td>
+                        <td>
+                            {{ item.payout }}
+                            {% if item.type != '現在' %}
+                                枚
+                            {% endif %}
+                        </td>
+                        <td>
+                            {{ "%.2f"|format(item.wari_at_point) }} %
+                        </td>
+                        <td>
+                            {{ "%+.0f"|format(item.sashimai_at_point) }} 枚
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>
