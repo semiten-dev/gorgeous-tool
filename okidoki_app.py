@@ -3,7 +3,7 @@ from flask import Flask, render_template, request, session, redirect, url_for
 import os
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24) 
+app.secret_key = os.urandom('SECRET_KEY') 
 
 # --- 定数 ---
 COST_PER_GAME_NET = 50.0 / 32.0   # (1.5625) 差枚計算用
